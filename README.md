@@ -4,6 +4,8 @@ A high-performance desktop plugin for **[Obsidian](https://obsidian.md)** develo
 
 Perfect for Data Structures & Algorithms (DSA), competitive programming, note-taking, educational walkthroughs, and rapid prototyping.
 
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/sskhekhaliya)
+
 ---
 
 ## ✨ Features
@@ -216,7 +218,16 @@ npm run check
 
 ---
 
+## ☕ Support
+
+If you find **Code Runner** useful, consider buying me a coffee to support its ongoing development:
+
+<a href="https://buymeacoffee.com/sskhekhaliya" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" width="180"></a>
+
+---
+
 ## 📄 License & Credits
 
 - **Author**: [SSKhekhaliya](https://www.sskhekhaliya.in/)
+- **Support**: [buymeacoffee.com/sskhekhaliya](https://buymeacoffee.com/sskhekhaliya)
 - Built for the [Obsidian](https://obsidian.md) community.

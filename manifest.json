@@ -1,0 +1,11 @@
+{
+  "id": "obsidian-code-runner",
+  "name": "Code Runner",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Run, test, and inspect Java, Python, and JavaScript code directly from Obsidian notes.",
+  "author": "SSKhekhaliya",
+  "authorUrl": "https://www.sskhekhaliya.in/",
+  "isDesktopOnly": true
+}
+

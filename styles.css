@@ -1,0 +1,236 @@
+.code-runner-view,
+.java-ide-view {
+  --runner-border: var(--background-modifier-border);
+  --runner-surface: var(--background-secondary);
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 22px;
+}
+
+.code-runner-hero,
+.java-ide-hero {
+  align-items: center;
+  background: linear-gradient(135deg, var(--background-secondary), var(--background-primary-alt));
+  border: 1px solid var(--runner-border);
+  border-radius: 14px;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  margin-bottom: 22px;
+  padding: 17px 18px;
+}
+
+.code-runner-hero h2,
+.java-ide-hero h2 {
+  font-size: 1.25em;
+  letter-spacing: -.02em;
+  line-height: 1.1;
+  margin: 0 0 6px;
+}
+
+.code-runner-subtitle,
+.java-ide-subtitle {
+  color: var(--text-muted);
+  font-size: .86em;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.code-runner-subtitle + .code-runner-subtitle,
+.java-ide-subtitle + .java-ide-subtitle {
+  color: var(--text-faint);
+  margin-top: 2px;
+}
+
+.code-runner-actions,
+.code-runner-toolbar,
+.java-ide-actions,
+.java-ide-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.code-runner-view button,
+.code-runner-view select,
+.java-ide-view button,
+.java-ide-view select {
+  border-radius: 7px;
+  font-size: .86em;
+  min-height: 30px;
+}
+
+.code-runner-view button,
+.java-ide-view button {
+  padding: 4px 10px;
+}
+
+.code-runner-actions .mod-cta,
+.java-ide-actions .mod-cta {
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--interactive-accent) 25%, transparent);
+}
+
+.code-runner-label,
+.java-ide-label {
+  color: var(--text-muted);
+  display: block;
+  font-size: .72em;
+  font-weight: 700;
+  letter-spacing: .075em;
+  margin: 18px 0 8px;
+  text-transform: uppercase;
+}
+
+.code-runner-input,
+.java-ide-input {
+  background: var(--runner-surface);
+  border: 1px solid var(--runner-border);
+  border-radius: 10px;
+  box-sizing: border-box;
+  font: 13px/1.5 var(--font-monospace);
+  min-height: 76px;
+  padding: 10px 11px;
+  resize: vertical;
+  transition: border-color .15s ease, box-shadow .15s ease;
+  width: 100%;
+}
+
+.code-runner-input:focus,
+.code-runner-test input:focus,
+.java-ide-input:focus,
+.java-ide-test input:focus {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 18%, transparent);
+  outline: none;
+}
+
+.code-runner-toolbar,
+.java-ide-toolbar {
+  border-bottom: 1px solid var(--runner-border);
+  margin: 14px 0 16px;
+  padding-bottom: 14px;
+}
+
+.code-runner-toolbar select,
+.java-ide-toolbar select {
+  background: var(--runner-surface);
+  border: 1px solid var(--runner-border);
+  color: var(--text-normal);
+  padding: 4px 8px;
+}
+
+.code-runner-tests,
+.java-ide-tests {
+  background: var(--background-primary-alt);
+  border: 1px solid var(--runner-border);
+  border-radius: 11px;
+  margin-top: 14px;
+  padding: 2px 13px 12px;
+}
+
+.code-runner-tests .code-runner-label,
+.java-ide-tests .java-ide-label {
+  margin-top: 12px;
+}
+
+.code-runner-test,
+.java-ide-test {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: 1fr 1fr auto;
+  margin: 7px 0;
+}
+
+.code-runner-test input,
+.java-ide-test input {
+  background: var(--background-secondary);
+  border: 1px solid var(--runner-border);
+  border-radius: 6px;
+  box-sizing: border-box;
+  color: var(--text-normal);
+  min-width: 0;
+  padding: 5px 7px;
+  width: 100%;
+}
+
+.code-runner-console,
+.java-ide-console {
+  background: var(--background-primary-alt);
+  border: 1px solid var(--runner-border);
+  border-radius: 11px;
+  box-sizing: border-box;
+  color: var(--text-normal);
+  font: 13px/1.55 var(--font-monospace);
+  max-height: 48vh;
+  min-height: 190px;
+  margin: 0;
+  overflow: auto;
+  padding: 13px;
+  white-space: pre-wrap;
+}
+
+.code-runner-status,
+.java-ide-status {
+  color: var(--text-muted);
+  font-size: .82em;
+  margin: 8px 2px 0;
+}
+
+.code-runner-error,
+.java-ide-error {
+  color: var(--text-error);
+}
+
+.code-runner-success,
+.java-ide-success {
+  color: var(--text-success);
+}
+
+.code-runner-credit {
+  color: var(--text-faint);
+  font-size: .76em;
+  letter-spacing: .01em;
+  margin: 20px 2px 0;
+  text-align: right;
+}
+
+.code-runner-credit a {
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color .15s ease;
+}
+
+.code-runner-credit a:hover {
+  color: var(--interactive-accent);
+  text-decoration: underline;
+}
+
+@media (max-width: 560px) {
+  .code-runner-view,
+  .java-ide-view {
+    padding: 12px;
+  }
+  .code-runner-hero,
+  .java-ide-hero {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .code-runner-actions,
+  .java-ide-actions {
+    width: 100%;
+  }
+  .code-runner-actions button,
+  .java-ide-actions button {
+    flex: 1 1 auto;
+  }
+  .code-runner-test,
+  .java-ide-test {
+    grid-template-columns: 1fr auto;
+  }
+  .code-runner-test input:first-child,
+  .java-ide-test input:first-child {
+    grid-column: 1 / -1;
+  }
+}

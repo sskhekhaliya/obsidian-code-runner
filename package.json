@@ -1,0 +1,21 @@
+{
+  "name": "obsidian-code-runner",
+  "version": "0.1.0",
+  "description": "A local Java, Python, and JavaScript runner for Obsidian",
+  "main": "main.js",
+  "author": {
+    "name": "SSKhekhaliya",
+    "url": "https://www.sskhekhaliya.in/"
+  },
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "esbuild": "^0.24.0",
+    "obsidian": "latest",
+    "typescript": "^5.5.4"
+  }
+}

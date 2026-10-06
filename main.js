@@ -20,7 +20,10 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/main.ts
 var main_exports = {};
 __export(main_exports, {
-  default: () => CodeRunnerPlugin
+  default: () => CodeRunnerPlugin,
+  getDsaDiagnosticHint: () => getDsaDiagnosticHint,
+  normalizeDsaOutput: () => normalizeDsaOutput,
+  parseBulkInput: () => parseBulkInput
 });
 module.exports = __toCommonJS(main_exports);
 var import_obsidian = require("obsidian");
@@ -31,14 +34,66 @@ var import_path = require("path");
 var VIEW_TYPE_CODE_RUNNER = "obsidian-code-runner";
 var DEFAULT_TIMEOUT_MS = 1e4;
 var AUTHOR_URL = "https://www.sskhekhaliya.in/";
+function normalizeDsaOutput(val) {
+  return (val ?? "").replace(/\r\n/g, "\n").trim().split("\n").map((line) => line.trimEnd()).join("\n");
+}
+function parseBulkInput(raw) {
+  const text = (raw ?? "").trim();
+  if (!text) return [];
+  if (text.startsWith("[") && text.endsWith("]")) {
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) {
+        const results = parsed.filter((item) => typeof item === "object" && item !== null).map((item) => ({
+          input: String(item.input ?? item.in ?? item.stdin ?? "").replace(/\r\n/g, "\n"),
+          expected: String(item.expected ?? item.output ?? item.out ?? item.stdout ?? "").replace(/\r\n/g, "\n")
+        }));
+        if (results.length > 0) return results;
+      }
+    } catch {
+    }
+  }
+  if (/===\s*(?:CASE|INPUT)\s*===/i.test(text)) {
+    const cases = [];
+    const chunks = text.split(/(?:^|\n)===\s*(?:CASE|INPUT)\s*===\s*\n/i).filter((c) => c.trim().length > 0);
+    for (const chunk of chunks) {
+      const parts = chunk.split(/\n===\s*(?:EXPECTED|OUTPUT)\s*===\s*\n/i);
+      cases.push({
+        input: parts[0] ? parts[0].trimEnd() : "",
+        expected: parts[1] ? parts[1].trimEnd() : ""
+      });
+    }
+    if (cases.length > 0) return cases;
+  }
+  return [];
+}
+function getDsaDiagnosticHint(error, inputProvided) {
+  if (!error) return null;
+  if (/NoSuchElementException/i.test(error) || /EOFError/i.test(error)) {
+    return inputProvided ? "Input ended before reading was complete. Ensure all required tokens or lines are provided in the input." : "Program expected input from standard input, but the input was empty. Provide test input before running.";
+  }
+  if (/ArrayIndexOutOfBoundsException/i.test(error) || /IndexError:\s*list index out of range/i.test(error)) {
+    return "Array/List index out of bounds! Verify loop bounds (< array.length), 0-indexing, and base conditions.";
+  }
+  if (/NullPointerException/i.test(error) || /AttributeError:\s*'NoneType'/i.test(error)) {
+    return "Null pointer / None dereference! Check linked list next pointers, tree child nodes, or uninitialized objects.";
+  }
+  if (/StackOverflowError/i.test(error) || /RecursionError:\s*maximum recursion depth/i.test(error)) {
+    return "Stack Overflow / Recursion limit reached! Ensure your recursive solution has proper base cases.";
+  }
+  if (/OutOfMemoryError/i.test(error) || /MemoryError/i.test(error)) {
+    return "Memory limit exceeded! Check for infinite allocations or exponential state space in recursion/graphs.";
+  }
+  return null;
+}
 var CodeRunnerPlugin = class extends import_obsidian.Plugin {
   constructor() {
     super(...arguments);
-    this.data = { tests: {}, history: {} };
+    this.data = { tests: {}, bulkTests: {}, history: {} };
     this.clickedBlockLines = /* @__PURE__ */ new Map();
   }
   async onload() {
-    this.data = Object.assign({ tests: {}, history: {} }, await this.loadData());
+    this.data = Object.assign({ tests: {}, bulkTests: {}, history: {} }, await this.loadData());
     this.registerView(VIEW_TYPE_CODE_RUNNER, (leaf) => new CodeRunnerView(leaf, this));
     this.registerView("obsidian-java-ide", (leaf) => new CodeRunnerView(leaf, this));
     this.addRibbonIcon("terminal-square", "Open Code Runner", () => void this.openIde());
@@ -71,14 +126,25 @@ var CodeRunnerPlugin = class extends import_obsidian.Plugin {
 var CodeRunnerView = class extends import_obsidian.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
-    this.stdin = "";
-    this.output = "Select a note containing a supported fenced code block, then press Run.";
+    this.output = "Select a note containing a supported code block, then press Run.";
     this.status = "Ready";
+    this.diagnosticHint = null;
     this.tests = [];
+    this.bulkTests = [];
+    this.bulkEditorOpen = false;
+    this.bulkPasteText = "";
     this.selectedBlock = 0;
     this.sourceCount = 0;
+    this.cachedSources = [];
     this.blockClickListening = false;
     this.lastRunResult = "";
+    // Streamlined 2-Mode Architecture
+    this.activeMode = "terminal";
+    this.testSubMode = "sample";
+    this.activeTestTab = 0;
+    this.isRunningTests = false;
+    this.isRunningBulk = false;
+    this.isProcessRunning = false;
     this.plugin = plugin;
   }
   getViewType() {
@@ -93,6 +159,7 @@ var CodeRunnerView = class extends import_obsidian.ItemView {
   async onOpen() {
     this.registerEvent(this.app.workspace.on("file-open", () => {
       this.tests = [];
+      this.bulkTests = [];
       void this.refreshBlocks(true);
     }));
     this.registerEvent(this.app.workspace.on("editor-change", () => this.queueSourceRefresh()));
@@ -174,8 +241,11 @@ var CodeRunnerView = class extends import_obsidian.ItemView {
     if (!source || source.index === this.selectedBlock) return;
     this.selectedBlock = source.index;
     this.tests = [];
+    this.bulkTests = [];
+    this.activeTestTab = 0;
+    this.bulkResult = void 0;
     await this.ensureTests();
-    this.status = `${source.language} block ${source.index + 1} selected. Press Run.`;
+    this.status = `${source.language} block ${source.index + 1} selected.`;
     this.render();
   }
   queueSourceRefresh() {
@@ -183,112 +253,557 @@ var CodeRunnerView = class extends import_obsidian.ItemView {
     this.refreshTimer = window.setTimeout(() => void this.refreshBlocks(), 250);
   }
   async refreshBlocks(force = false) {
-    const sourceCount = (await this.getSources()).length;
+    const sources = await this.getSources();
+    this.cachedSources = sources;
+    const sourceCount = sources.length;
     const selectionChanged = this.selectedBlock >= sourceCount;
     if (!force && sourceCount === this.sourceCount && !selectionChanged) return;
     this.sourceCount = sourceCount;
     if (selectionChanged) this.selectedBlock = 0;
     if (selectionChanged || force) {
       this.tests = [];
+      this.bulkTests = [];
+      this.activeTestTab = 0;
+      this.bulkResult = void 0;
       await this.ensureTests();
     }
     this.render();
+  }
+  async ensureTests() {
+    const key = this.noteKey();
+    if (!this.tests.length && this.plugin.data.tests[key]) {
+      this.tests = this.plugin.data.tests[key].map((t) => ({ input: t.input, expected: t.expected }));
+    }
+    if (!this.bulkTests.length && this.plugin.data.bulkTests?.[key]) {
+      this.bulkTests = this.plugin.data.bulkTests[key].map((t) => ({ input: t.input, expected: t.expected }));
+    }
+    if (this.activeTestTab >= this.tests.length) {
+      this.activeTestTab = Math.max(0, this.tests.length - 1);
+    }
+  }
+  async saveTests() {
+    this.plugin.data.tests[this.noteKey()] = this.tests.map((t) => ({ input: t.input, expected: t.expected }));
+    await this.plugin.saveData(this.plugin.data);
+  }
+  async saveBulkTests() {
+    if (!this.plugin.data.bulkTests) this.plugin.data.bulkTests = {};
+    this.plugin.data.bulkTests[this.noteKey()] = this.bulkTests.map((t) => ({ input: t.input, expected: t.expected }));
+    await this.plugin.saveData(this.plugin.data);
+  }
+  appendConsole(text) {
+    this.output += text;
+    if (this.consolePreEl) {
+      this.consolePreEl.textContent = this.output;
+      this.consolePreEl.scrollTop = this.consolePreEl.scrollHeight;
+    }
+  }
+  sendTerminalInput(text) {
+    if (!this.running || !this.running.stdin || this.running.killed) return;
+    const line = text;
+    this.appendConsole(line + "\n");
+    try {
+      this.running.stdin.write(line + "\n");
+    } catch {
+    }
+  }
+  sendEOF() {
+    if (!this.running || !this.running.stdin || this.running.killed) return;
+    try {
+      this.running.stdin.end();
+      this.appendConsole("\n[EOF]\n");
+    } catch {
+    }
   }
   render() {
     const root = this.contentEl;
     root.empty();
     root.addClass("code-runner-view");
     const hero = root.createDiv("code-runner-hero");
-    const title = hero.createDiv();
-    title.createEl("h2", { text: "Code Runner" });
-    title.createEl("p", { text: this.activeFile()?.basename ?? "No active note", cls: "code-runner-subtitle" });
-    title.createEl("p", { text: "Java \xB7 Python \xB7 JavaScript", cls: "code-runner-subtitle" });
+    const titleArea = hero.createDiv("code-runner-title-area");
+    const titleHeader = titleArea.createDiv("code-runner-title-header");
+    titleHeader.createEl("h2", { text: "Code Runner" });
+    const badge = titleHeader.createSpan({ cls: "code-runner-dsa-badge", text: "Interactive IDE" });
+    badge.title = "Terminal & DSA Workbench";
+    titleArea.createEl("p", { text: this.activeFile()?.basename ?? "No active note", cls: "code-runner-subtitle" });
     const actions = hero.createDiv("code-runner-actions");
-    const run = actions.createEl("button", { text: "\u25B6 Run", cls: "mod-cta" });
-    run.onclick = () => void this.run();
-    const debug = actions.createEl("button", { text: "\u{1F41B} Debug" });
-    debug.onclick = () => void this.run(true);
-    const insert = actions.createEl("button", { text: "\u21B3 Insert result" });
-    insert.onclick = () => void this.insertResult();
-    const stop = actions.createEl("button", { text: "\u25A0 Stop" });
-    stop.onclick = () => this.stop();
-    root.createEl("label", { text: "Standard input", cls: "code-runner-label" });
-    const input = root.createEl("textarea", { cls: "code-runner-input", attr: { placeholder: "Input passed to stdin" } });
-    input.value = this.stdin;
-    input.oninput = () => this.stdin = input.value;
-    const toolbar = root.createDiv("code-runner-toolbar");
+    const hasSample = this.tests.length > 0 && this.tests.some((t) => t.input.trim() || t.expected.trim());
+    const hasBulk = this.bulkTests.length > 0;
+    const runBtnText = this.activeMode === "terminal" ? "\u25B6 Run in Terminal" : hasSample && hasBulk ? "\u25B6 Run All Tests" : hasBulk ? "\u25B6 Run Bulk Tests" : "\u25B6 Run Tests";
+    const runBtn = actions.createEl("button", {
+      text: runBtnText,
+      cls: "mod-cta code-runner-btn-primary"
+    });
+    runBtn.onclick = () => {
+      if (this.activeMode === "terminal") {
+        void this.run(false, "", void 0, true);
+      } else {
+        void this.runUnifiedTests();
+      }
+    };
+    const debugBtn = actions.createEl("button", { text: "\u{1F41B} Debug", cls: "code-runner-btn" });
+    debugBtn.onclick = () => void this.run(true);
+    const insertBtn = actions.createEl("button", { text: "\u21B3 Insert", cls: "code-runner-btn" });
+    insertBtn.title = "Insert last output below the code fence in note";
+    insertBtn.onclick = () => void this.insertResult();
+    const stopBtn = actions.createEl("button", { text: "\u25A0 Stop", cls: "code-runner-btn mod-warning" });
+    stopBtn.onclick = () => this.stop();
     if (this.sourceCount > 1) {
-      const select = toolbar.createEl("select", { attr: { "aria-label": "Code block" } });
-      for (let i = 0; i < this.sourceCount; i++) select.createEl("option", { text: `Code block ${i + 1}`, value: String(i) });
+      const blockToolbar = root.createDiv("code-runner-block-toolbar");
+      blockToolbar.createSpan({ text: "Active Block:", cls: "code-runner-toolbar-label" });
+      const select = blockToolbar.createEl("select", {
+        cls: "dropdown code-runner-select",
+        attr: { "aria-label": "Select code block" }
+      });
+      for (let i = 0; i < this.sourceCount; i++) {
+        const src = this.cachedSources[i];
+        const label = src ? `Block ${i + 1} (${src.language})` : `Block ${i + 1}`;
+        select.createEl("option", { text: label, value: String(i) });
+      }
       select.value = String(this.selectedBlock);
       select.onchange = () => {
         this.selectedBlock = Number(select.value);
         this.tests = [];
+        this.bulkTests = [];
+        this.activeTestTab = 0;
+        this.bulkResult = void 0;
         void this.ensureTests().then(() => this.render());
       };
-      toolbar.createEl("button", { text: "Run all" }).onclick = () => void this.runAllBlocks();
+      blockToolbar.createEl("button", { text: "Run all blocks", cls: "code-runner-btn-sm" }).onclick = () => void this.runAllBlocks();
     }
-    toolbar.createEl("button", { text: "Run test cases" }).onclick = () => void this.runTests();
-    toolbar.createEl("button", { text: "+ Add test case" }).onclick = () => {
-      this.tests.push({ input: "", expected: "" });
-      void this.saveTests();
+    const modeSwitch = root.createDiv("code-runner-mode-switch");
+    const terminalModeBtn = modeSwitch.createEl("button", {
+      text: "Terminal",
+      cls: `code-runner-mode-btn ${this.activeMode === "terminal" ? "is-active" : ""}`
+    });
+    terminalModeBtn.onclick = () => {
+      this.activeMode = "terminal";
       this.render();
     };
-    toolbar.createEl("button", { text: "Clear console" }).onclick = () => {
-      this.output = "";
-      this.status = "Ready";
+    const testModeBtn = modeSwitch.createEl("button", {
+      text: "Test Cases",
+      cls: `code-runner-mode-btn ${this.activeMode === "tests" ? "is-active" : ""}`
+    });
+    testModeBtn.onclick = () => {
+      this.activeMode = "tests";
       this.render();
     };
-    this.renderTests(root);
-    root.createEl("label", { text: "Output console", cls: "code-runner-label" });
-    root.createEl("pre", { text: this.output || "(no output)", cls: "code-runner-console" });
-    root.createEl("div", { text: this.status, cls: `code-runner-status ${this.status.startsWith("Error") ? "code-runner-error" : ""}` });
+    if (this.activeMode === "tests") {
+      this.renderTestCasesSection(root);
+    }
+    this.renderConsoleSection(root);
     const credit = root.createDiv("code-runner-credit");
-    credit.appendText("Developed by ");
+    credit.appendText("Code Runner by ");
     credit.createEl("a", {
       text: "SSKhekhaliya",
       href: AUTHOR_URL,
       attr: { target: "_blank", rel: "noopener noreferrer" }
     });
   }
-  renderTests(root) {
-    const section = root.createDiv("code-runner-tests");
-    section.createEl("label", { text: "Test cases", cls: "code-runner-label" });
-    if (!this.tests.length) {
-      section.createDiv({ text: "Add inputs and expected outputs to check your solution automatically.", cls: "code-runner-subtitle" });
+  renderTestCasesSection(root) {
+    const container = root.createDiv("code-runner-tests-section");
+    const subSwitch = container.createDiv("code-runner-sub-switch");
+    const sampleSubBtn = subSwitch.createEl("button", {
+      text: "Sample Cases",
+      cls: `code-runner-sub-btn ${this.testSubMode === "sample" ? "is-active" : ""}`
+    });
+    sampleSubBtn.onclick = () => {
+      this.testSubMode = "sample";
+      this.render();
+    };
+    const bulkSubBtn = subSwitch.createEl("button", {
+      text: "Bulk Suite",
+      cls: `code-runner-sub-btn ${this.testSubMode === "bulk" ? "is-active" : ""}`
+    });
+    bulkSubBtn.onclick = () => {
+      this.testSubMode = "bulk";
+      this.render();
+    };
+    if (this.testSubMode === "sample") {
+      this.renderDsaTestWorkbench(container);
+    } else {
+      this.renderBulkSuiteSection(container);
+    }
+  }
+  renderDsaTestWorkbench(container) {
+    const wrapper = container.createDiv("code-runner-dsa-container");
+    const tabHeader = wrapper.createDiv("code-runner-tabs-header");
+    const tabsList = tabHeader.createDiv("code-runner-tabs-list");
+    if (this.tests.length === 0) {
+      this.tests.push({ input: "", expected: "" });
+      void this.saveTests();
+    }
+    const useCompactPills = this.tests.length > 5;
+    if (useCompactPills) {
+      tabsList.addClass("is-compact-grid");
     }
     this.tests.forEach((test, index) => {
-      const row = section.createDiv("code-runner-test");
-      const input = row.createEl("input", { attr: { placeholder: `Case ${index + 1} input` } });
-      input.value = test.input;
-      input.oninput = () => {
-        test.input = input.value;
-        void this.saveTests();
-      };
-      const expected = row.createEl("input", { attr: { placeholder: "Expected output" } });
-      expected.value = test.expected;
-      expected.oninput = () => {
-        test.expected = expected.value;
-        void this.saveTests();
-      };
-      row.createEl("button", { text: "\xD7", attr: { "aria-label": "Remove test" } }).onclick = () => {
-        this.tests.splice(index, 1);
-        void this.saveTests();
+      const tab = tabsList.createDiv({
+        cls: `code-runner-tab ${useCompactPills ? "is-compact" : ""} ${this.activeTestTab === index ? "is-active" : ""}`
+      });
+      const statusDot = tab.createSpan("code-runner-tab-dot");
+      if (test.lastResult) {
+        if (test.lastResult.status === "Accepted") {
+          statusDot.addClass("dot-accepted");
+          statusDot.title = `Accepted (${test.lastResult.durationMs}ms)`;
+        } else if (test.lastResult.status === "Time Limit Exceeded") {
+          statusDot.addClass("dot-tle");
+          statusDot.title = "Time Limit Exceeded";
+        } else {
+          statusDot.addClass("dot-failed");
+          statusDot.title = test.lastResult.status;
+        }
+      }
+      tab.createSpan({ text: useCompactPills ? String(index + 1) : `Case ${index + 1}` });
+      tab.onclick = () => {
+        this.activeTestTab = index;
         this.render();
       };
     });
-  }
-  async ensureTests() {
-    const key = this.noteKey();
-    if (!this.tests.length && this.plugin.data.tests[key]) {
-      this.tests = this.plugin.data.tests[key].map((t) => ({ ...t }));
+    const addTabBtn = tabsList.createEl("button", {
+      text: "+",
+      cls: `code-runner-add-tab-btn ${useCompactPills ? "is-compact" : ""}`,
+      attr: { title: "Add new test case" }
+    });
+    addTabBtn.onclick = () => {
+      this.tests.push({ input: "", expected: "" });
+      this.activeTestTab = this.tests.length - 1;
+      void this.saveTests();
+      this.render();
+    };
+    const activeTest = this.tests[this.activeTestTab];
+    if (activeTest) {
+      const card = wrapper.createDiv("code-runner-card");
+      const cardHeader = card.createDiv("code-runner-card-header");
+      const titleSpan = cardHeader.createSpan({
+        cls: "code-runner-card-title",
+        text: `Case ${this.activeTestTab + 1} of ${this.tests.length}`
+      });
+      if (activeTest.lastResult) {
+        const badgeCls = activeTest.lastResult.status === "Accepted" ? "verdict-accepted" : activeTest.lastResult.status === "Time Limit Exceeded" ? "verdict-tle" : "verdict-failed";
+        titleSpan.createSpan({
+          cls: `code-runner-verdict-badge ${badgeCls}`,
+          text: `${activeTest.lastResult.status} (${activeTest.lastResult.durationMs} ms)`
+        });
+      }
+      const caseActions = cardHeader.createDiv("code-runner-card-actions");
+      const runCaseBtn = caseActions.createEl("button", { text: "\u25B6 Run Case", cls: "code-runner-btn-sm" });
+      runCaseBtn.onclick = () => void this.runSingleTestCase(this.activeTestTab);
+      const copyInputBtn = caseActions.createEl("button", { text: "\u{1F4CB} Copy", cls: "code-runner-btn-sm" });
+      copyInputBtn.title = "Copy case input to clipboard";
+      copyInputBtn.onclick = async () => {
+        await navigator.clipboard.writeText(activeTest.input);
+        new import_obsidian.Notice(`Case ${this.activeTestTab + 1} input copied to clipboard.`);
+      };
+      if (this.tests.length > 1) {
+        const deleteBtn = caseActions.createEl("button", { text: "\u{1F5D1}\uFE0F", cls: "code-runner-btn-icon" });
+        deleteBtn.title = "Delete test case";
+        deleteBtn.onclick = () => {
+          this.tests.splice(this.activeTestTab, 1);
+          if (this.activeTestTab >= this.tests.length) {
+            this.activeTestTab = Math.max(0, this.tests.length - 1);
+          }
+          void this.saveTests();
+          this.render();
+        };
+      }
+      card.createEl("label", { text: "Input", cls: "code-runner-field-label" });
+      const inputArea = card.createEl("textarea", {
+        cls: "code-runner-textarea",
+        attr: { placeholder: "e.g.\n5\n1 2 3 4 5", rows: "3" }
+      });
+      inputArea.value = activeTest.input;
+      inputArea.oninput = () => {
+        activeTest.input = inputArea.value;
+        void this.saveTests();
+      };
+      card.createEl("label", { text: "Expected Output", cls: "code-runner-field-label" });
+      const expectedArea = card.createEl("textarea", {
+        cls: "code-runner-textarea",
+        attr: { placeholder: "Expected output after execution", rows: "2" }
+      });
+      expectedArea.value = activeTest.expected;
+      expectedArea.oninput = () => {
+        activeTest.expected = expectedArea.value;
+        void this.saveTests();
+      };
+      if (activeTest.lastResult) {
+        card.createEl("label", { text: "Your Output", cls: "code-runner-field-label" });
+        card.createEl("pre", {
+          cls: `code-runner-actual-box ${activeTest.lastResult.status === "Accepted" ? "is-passed" : "is-failed"}`,
+          text: activeTest.lastResult.output || (activeTest.lastResult.error ? `Error: ${activeTest.lastResult.error}` : "(no output)")
+        });
+      }
     }
   }
-  async saveTests() {
-    this.plugin.data.tests[this.noteKey()] = this.tests;
-    await this.plugin.saveData(this.plugin.data);
+  renderBulkSuiteSection(container) {
+    const wrapper = container.createDiv("code-runner-bulk-container");
+    const fileInput = wrapper.createEl("input", {
+      type: "file",
+      attr: { accept: ".json,.txt", style: "display: none;" }
+    });
+    fileInput.onchange = async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      try {
+        const content = await file.text();
+        const cases = parseBulkInput(content);
+        if (cases.length > 0) {
+          this.bulkTests = cases;
+          this.bulkResult = void 0;
+          this.bulkEditorOpen = false;
+          await this.saveBulkTests();
+          new import_obsidian.Notice(`Loaded ${cases.length} bulk test cases from ${file.name}!`);
+          this.render();
+        } else {
+          new import_obsidian.Notice("Could not parse test cases from file. Format should be JSON or === CASE === delimited.");
+        }
+      } catch (err) {
+        new import_obsidian.Notice(`Failed to read file: ${String(err)}`);
+      }
+    };
+    const header = wrapper.createDiv("code-runner-bulk-header");
+    const titleArea = header.createDiv("code-runner-bulk-title-area");
+    titleArea.createEl("span", { text: "Bulk Test Suite", cls: "code-runner-bulk-title" });
+    if (this.bulkTests.length > 0) {
+      titleArea.createSpan({ text: `${this.bulkTests.length} cases`, cls: "code-runner-bulk-count" });
+    }
+    const tools = header.createDiv("code-runner-bulk-tools");
+    const uploadBtn = tools.createEl("button", { text: "\u{1F4C1} Upload File", cls: "code-runner-btn-sm" });
+    uploadBtn.title = "Upload .json or .txt test file";
+    uploadBtn.onclick = () => fileInput.click();
+    const editBtn = tools.createEl("button", {
+      text: this.bulkEditorOpen ? "Close Editor" : "\u{1F4CB} Paste / Edit",
+      cls: "code-runner-btn-sm"
+    });
+    editBtn.onclick = () => {
+      this.bulkEditorOpen = !this.bulkEditorOpen;
+      this.render();
+    };
+    if (this.bulkTests.length > 0) {
+      const clearBtn = tools.createEl("button", { text: "\u{1F5D1}\uFE0F Clear", cls: "code-runner-btn-icon" });
+      clearBtn.title = "Clear bulk test cases";
+      clearBtn.onclick = async () => {
+        this.bulkTests = [];
+        this.bulkResult = void 0;
+        await this.saveBulkTests();
+        this.render();
+      };
+    }
+    if (this.bulkTests.length === 0 && !this.bulkEditorOpen) {
+      const emptyState = wrapper.createDiv("code-runner-bulk-empty");
+      emptyState.createEl("p", {
+        text: "No bulk test cases loaded yet. Click '\u{1F4C1} Upload File' or '\u{1F4CB} Paste / Edit' to import your test cases.",
+        cls: "code-runner-subtitle"
+      });
+    }
+    if (this.bulkEditorOpen || this.bulkTests.length === 0) {
+      const editorBox = wrapper.createDiv("code-runner-bulk-editor");
+      editorBox.createEl("label", {
+        text: "Paste bulk test cases in JSON or delimited format:",
+        cls: "code-runner-field-label"
+      });
+      const textarea = editorBox.createEl("textarea", {
+        cls: "code-runner-textarea code-runner-bulk-textarea",
+        attr: {
+          placeholder: 'JSON format:\n[\n  {"input": "5\\n1 2 3", "expected": "6"}\n]\n\nOR Delimited format:\n=== CASE ===\n5\n1 2 3\n=== EXPECTED ===\n6',
+          rows: "6"
+        }
+      });
+      textarea.value = this.bulkPasteText;
+      textarea.oninput = () => this.bulkPasteText = textarea.value;
+      const editorActions = editorBox.createDiv("code-runner-bulk-editor-actions");
+      const importBtn = editorActions.createEl("button", { text: "\u{1F4E5} Import Pasted Cases", cls: "mod-cta code-runner-btn-sm" });
+      importBtn.onclick = async () => {
+        const parsed = parseBulkInput(this.bulkPasteText);
+        if (parsed.length > 0) {
+          this.bulkTests = parsed;
+          this.bulkResult = void 0;
+          this.bulkEditorOpen = false;
+          this.bulkPasteText = "";
+          await this.saveBulkTests();
+          new import_obsidian.Notice(`Successfully imported ${parsed.length} bulk test cases!`);
+          this.render();
+        } else {
+          new import_obsidian.Notice("Could not parse test cases. Please check format.");
+        }
+      };
+      if (this.bulkTests.length > 0) {
+        const cancelBtn = editorActions.createEl("button", { text: "Cancel", cls: "code-runner-btn-sm" });
+        cancelBtn.onclick = () => {
+          this.bulkEditorOpen = false;
+          this.render();
+        };
+      }
+    }
+    if (this.bulkResult) {
+      const res = this.bulkResult;
+      const isSuccess = res.failed === 0;
+      const banner = wrapper.createDiv(`code-runner-bulk-banner ${isSuccess ? "is-success" : "is-failure"}`);
+      const bannerTop = banner.createDiv("code-runner-bulk-banner-top");
+      bannerTop.createEl("span", {
+        text: isSuccess ? `\u2705 All ${res.total} Bulk Cases Passed!` : `\u26A0\uFE0F ${res.passed}/${res.total} Passed (${res.failed} Failed)`,
+        cls: "code-runner-bulk-verdict"
+      });
+      bannerTop.createEl("span", {
+        text: `\u23F1 ${res.durationMs} ms`,
+        cls: "code-runner-bulk-time"
+      });
+      const progressTrack = banner.createDiv("code-runner-bulk-progress");
+      const passPercent = res.total > 0 ? res.passed / res.total * 100 : 0;
+      const fillBar = progressTrack.createDiv("code-runner-bulk-progress-fill");
+      fillBar.style.width = `${passPercent}%`;
+      if (res.failedIndices.length > 0) {
+        const failedSection = banner.createDiv("code-runner-bulk-failed-section");
+        failedSection.createEl("div", { text: `Failed Cases (${res.failed}):`, cls: "code-runner-field-label" });
+        const chipsList = failedSection.createDiv("code-runner-bulk-chips-list");
+        res.failedIndices.forEach((item) => {
+          const chip = chipsList.createSpan("code-runner-failed-chip");
+          chip.setText(`Case #${item.index} (${item.reason})`);
+        });
+      }
+    }
   }
-  async run(debug = false, input = this.stdin, blockIndex) {
+  renderConsoleSection(root) {
+    const consoleContainer = root.createDiv("code-runner-console-container");
+    const header = consoleContainer.createDiv("code-runner-console-header");
+    const headerLeft = header.createDiv("code-runner-console-header-left");
+    headerLeft.createEl("label", { text: "Terminal Console", cls: "code-runner-field-label" });
+    if (this.isProcessRunning) {
+      const liveBadge = headerLeft.createSpan("code-runner-live-badge");
+      liveBadge.createSpan("code-runner-pulse-dot");
+      liveBadge.appendText(" LIVE");
+    }
+    const tools = header.createDiv("code-runner-console-tools");
+    if (this.isProcessRunning) {
+      const eofBtn = tools.createEl("button", { text: "Send EOF", cls: "code-runner-btn-sm" });
+      eofBtn.title = "Send End-Of-File (Ctrl+D / Ctrl+Z) to close stdin";
+      eofBtn.onclick = () => this.sendEOF();
+    }
+    const copyBtn = tools.createEl("button", { text: "\u{1F4CB} Copy", cls: "code-runner-btn-sm" });
+    copyBtn.title = "Copy console output to clipboard";
+    copyBtn.onclick = async () => {
+      if (this.output) {
+        await navigator.clipboard.writeText(this.output);
+        new import_obsidian.Notice("Console output copied to clipboard.");
+      }
+    };
+    const clearBtn = tools.createEl("button", { text: "Clear", cls: "code-runner-btn-sm" });
+    clearBtn.onclick = () => {
+      this.output = "";
+      this.status = "Ready";
+      this.diagnosticHint = null;
+      this.render();
+    };
+    if (this.diagnosticHint) {
+      const diagBox = consoleContainer.createDiv("code-runner-diagnostic-box");
+      diagBox.createSpan({ text: "\u26A0\uFE0F Diagnostic: ", cls: "code-runner-diag-title" });
+      diagBox.createSpan({ text: this.diagnosticHint, cls: "code-runner-diag-message" });
+    }
+    const terminalWrapper = consoleContainer.createDiv("code-runner-terminal-wrapper");
+    this.consolePreEl = terminalWrapper.createEl("pre", {
+      text: this.output || "(no output)",
+      cls: `code-runner-console ${this.diagnosticHint ? "has-diagnostic" : ""}`
+    });
+    const terminalBar = terminalWrapper.createDiv("code-runner-terminal-bar");
+    terminalBar.createSpan({ text: ">", cls: "code-runner-terminal-prompt" });
+    this.terminalInputEl = terminalBar.createEl("input", {
+      type: "text",
+      cls: "code-runner-terminal-input",
+      attr: {
+        placeholder: this.isProcessRunning ? "Type input and press Enter..." : "Click 'Run in Terminal' to start interactive session...",
+        ...this.isProcessRunning ? {} : { disabled: "true" }
+      }
+    });
+    const sendBtn = terminalBar.createEl("button", {
+      text: "Send \u21B5",
+      cls: "code-runner-btn-sm code-runner-terminal-send",
+      attr: { ...this.isProcessRunning ? {} : { disabled: "true" } }
+    });
+    const handleSend = () => {
+      if (!this.terminalInputEl) return;
+      const val = this.terminalInputEl.value;
+      this.terminalInputEl.value = "";
+      this.sendTerminalInput(val);
+      this.terminalInputEl.focus();
+    };
+    this.terminalInputEl.onkeydown = (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleSend();
+      }
+    };
+    sendBtn.onclick = handleSend;
+    if (this.isProcessRunning) {
+      window.setTimeout(() => this.terminalInputEl?.focus(), 60);
+    }
+    const statusBar = consoleContainer.createDiv({
+      cls: `code-runner-status ${this.status.startsWith("Error") || this.status.includes("failed") ? "code-runner-error" : ""}`
+    });
+    statusBar.createSpan({ text: this.status });
+  }
+  async runSingleTestCase(index) {
+    const test = this.tests[index];
+    if (!test) return;
+    this.status = `Running Case ${index + 1}\u2026`;
+    this.render();
+    const result2 = await this.run(false, test.input, void 0, false);
+    if (!result2) return;
+    const normActual = normalizeDsaOutput(result2.output);
+    const normExpected = normalizeDsaOutput(test.expected);
+    let status = "Wrong Answer";
+    if (result2.timedOut) {
+      status = "Time Limit Exceeded";
+    } else if (!result2.ok) {
+      status = "Runtime Error";
+    } else if (normActual === normExpected) {
+      status = "Accepted";
+    }
+    test.lastResult = {
+      status,
+      output: result2.output,
+      error: result2.error,
+      durationMs: result2.durationMs
+    };
+    this.diagnosticHint = getDsaDiagnosticHint(result2.error, Boolean(test.input.trim()));
+    this.status = `Case ${index + 1}: ${status} in ${result2.durationMs} ms`;
+    this.render();
+  }
+  async runUnifiedTests() {
+    const hasSample = this.tests.length > 0 && this.tests.some((t) => t.input.trim() || t.expected.trim());
+    const hasBulk = this.bulkTests.length > 0;
+    if (!hasSample && !hasBulk) {
+      new import_obsidian.Notice("Add at least one sample test case or bulk test case first.");
+      return;
+    }
+    if (hasSample && hasBulk) {
+      await this.runTests(true);
+      await this.runBulkTests(true);
+      this.combineUnifiedTestSummary();
+    } else if (hasBulk) {
+      await this.runBulkTests();
+    } else {
+      await this.runTests();
+    }
+  }
+  combineUnifiedTestSummary() {
+    const samplePassed = this.tests.filter((t) => t.lastResult?.status === "Accepted").length;
+    const sampleTotal = this.tests.length;
+    const bulkPassed = this.bulkResult?.passed ?? 0;
+    const bulkTotal = this.bulkResult?.total ?? 0;
+    const allPassed = samplePassed === sampleTotal && (!bulkTotal || bulkPassed === bulkTotal);
+    this.status = allPassed ? `All tests passed! \u{1F389} (${samplePassed}/${sampleTotal} sample, ${bulkPassed}/${bulkTotal} bulk)` : `Tests: ${samplePassed}/${sampleTotal} sample passed, ${bulkPassed}/${bulkTotal} bulk passed`;
+    const summary = [
+      "================ Unified Test Suite ================",
+      `Sample Cases: ${samplePassed}/${sampleTotal} Passed`,
+      `Bulk Cases:   ${bulkPassed}/${bulkTotal} Passed`,
+      "----------------------------------------------------",
+      `Verdict: ${allPassed ? "ALL TESTS PASSED \u{1F389}" : "SOME TESTS FAILED \u2717"}`,
+      "===================================================="
+    ];
+    this.output = summary.join("\n") + "\n\n" + this.output;
+    this.render();
+  }
+  async run(debug = false, input = "", blockIndex, interactive = this.activeMode === "terminal") {
     const sources = await this.getSources();
     const targetBlock = blockIndex ?? this.selectedCursorBlock(sources);
     this.selectedBlock = targetBlock;
@@ -297,6 +812,7 @@ var CodeRunnerView = class extends import_obsidian.ItemView {
     if (!source) {
       this.output = "Error: the active Markdown note does not contain a supported code fence.";
       this.status = "Error: no supported code block found";
+      this.diagnosticHint = null;
       this.render();
       return null;
     }
@@ -309,20 +825,177 @@ var CodeRunnerView = class extends import_obsidian.ItemView {
         this.status = `Running ${source.language} block ${targetBlock + 1}\u2026`;
       }
     } else {
-      this.status = `Running ${source.language} block ${targetBlock + 1}\u2026`;
+      this.status = interactive ? `Running ${source.language} in interactive terminal\u2026` : `Running ${source.language} block ${targetBlock + 1}\u2026`;
     }
-    this.output = `${source.language === "java" ? "Compiling" : "Starting"} ${source.language} block ${targetBlock + 1}\u2026`;
+    this.output = `${source.language === "java" ? "Compiling" : "Starting"} ${source.language} block ${targetBlock + 1}\u2026
+`;
+    this.diagnosticHint = null;
+    this.isProcessRunning = true;
     this.render();
-    const result2 = await runCode(this.app, this.activeFile(), source, input, debug, (child) => this.running = child);
+    let hasReceivedRuntimeOutput = false;
+    const result2 = await runCode(this.app, this.activeFile(), source, {
+      debug,
+      input: interactive ? "" : input,
+      interactive,
+      onProcess: (child) => {
+        this.running = child;
+      },
+      onData: (chunk) => {
+        if (!hasReceivedRuntimeOutput) {
+          hasReceivedRuntimeOutput = true;
+          this.output = "";
+        }
+        this.appendConsole(chunk);
+      }
+    });
     this.running = void 0;
-    this.output = result2.output + (result2.error ? `${result2.output ? "\n" : ""}${result2.error}` : "");
+    this.isProcessRunning = false;
+    if (interactive) {
+      this.output = this.output.replace(/^(?:Compiling|Starting)\s+[^\n]*block\s+\d+…\r?\n?/i, "");
+      if (result2.error && !this.output.includes(result2.error)) {
+        this.output += (this.output.endsWith("\n") ? "" : "\n") + result2.error;
+      }
+    } else {
+      this.output = result2.output + (result2.error ? `${result2.output ? "\n" : ""}${result2.error}` : "");
+    }
     this.lastRunBlock = targetBlock;
     this.lastRunResult = this.output;
-    this.status = result2.ok ? `Completed ${source.language} in ${result2.durationMs} ms${source.language === "java" ? " \xB7 Java heap limit: 256 MB" : ""}` : `Error after ${result2.durationMs} ms`;
+    this.diagnosticHint = getDsaDiagnosticHint(result2.error, Boolean(input.trim()));
+    if (result2.timedOut) {
+      this.status = `Time Limit Exceeded after ${result2.durationMs} ms`;
+    } else {
+      this.status = result2.ok ? `Completed ${source.language} in ${result2.durationMs} ms${source.language === "java" ? " \xB7 Java heap: 256 MB" : ""}` : `Error after ${result2.durationMs} ms`;
+    }
     await this.plugin.remember(this.noteKey(), result2);
     await this.saveTests();
     this.render();
     return result2;
+  }
+  async runTests(isPart = false) {
+    await this.ensureTests();
+    if (!this.tests.length) {
+      if (!isPart) new import_obsidian.Notice("Add at least one test case first.");
+      return;
+    }
+    this.isRunningTests = true;
+    const lines = ["================ Sample Test Cases ================"];
+    let passed = 0;
+    let totalTime = 0;
+    for (let i = 0; i < this.tests.length; i++) {
+      const test = this.tests[i];
+      this.status = `Running Case ${i + 1} of ${this.tests.length}\u2026`;
+      this.render();
+      const result2 = await this.run(false, test.input, void 0, false);
+      if (!result2) {
+        this.isRunningTests = false;
+        return;
+      }
+      totalTime += result2.durationMs;
+      const normActual = normalizeDsaOutput(result2.output);
+      const normExpected = normalizeDsaOutput(test.expected);
+      let status = "Wrong Answer";
+      if (result2.timedOut) {
+        status = "Time Limit Exceeded";
+      } else if (!result2.ok) {
+        status = "Runtime Error";
+      } else if (normActual === normExpected) {
+        status = "Accepted";
+        passed++;
+      }
+      test.lastResult = {
+        status,
+        output: result2.output,
+        error: result2.error,
+        durationMs: result2.durationMs
+      };
+      const icon = status === "Accepted" ? "\u2713" : "\u2717";
+      lines.push(`${icon} Case ${i + 1}: ${status} (${result2.durationMs} ms)`);
+      if (status !== "Accepted") {
+        if (test.expected.trim()) {
+          lines.push(`   Expected: ${test.expected.trim().replace(/\n/g, "\n             ")}`);
+        }
+        lines.push(`   Actual:   ${(result2.output.trim() || result2.error.trim()).replace(/\n/g, "\n             ")}`);
+      }
+    }
+    this.isRunningTests = false;
+    lines.push("--------------------------------------------------");
+    lines.push(`Verdict: ${passed}/${this.tests.length} Passed | Total Time: ${totalTime} ms`);
+    lines.push("==================================================");
+    this.output = lines.join("\n");
+    this.status = passed === this.tests.length ? `All ${this.tests.length} cases Accepted \u{1F389} (${totalTime} ms)` : `${this.tests.length - passed} failed, ${passed} passed (${totalTime} ms)`;
+    const firstFailedIndex = this.tests.findIndex((t) => t.lastResult?.status !== "Accepted");
+    if (firstFailedIndex >= 0) {
+      this.activeTestTab = firstFailedIndex;
+    }
+    this.render();
+  }
+  async runBulkTests(isPart = false) {
+    if (!this.bulkTests.length) {
+      if (!isPart) new import_obsidian.Notice("No bulk test cases loaded.");
+      return;
+    }
+    this.isRunningBulk = true;
+    this.bulkResult = void 0;
+    this.status = `Running 0/${this.bulkTests.length} bulk cases\u2026`;
+    this.render();
+    let passed = 0;
+    let failed = 0;
+    let totalTime = 0;
+    const failedIndices = [];
+    for (let i = 0; i < this.bulkTests.length; i++) {
+      const test = this.bulkTests[i];
+      this.status = `Running bulk case ${i + 1}/${this.bulkTests.length}\u2026`;
+      if (i % 5 === 0 || i === this.bulkTests.length - 1) {
+        this.render();
+      }
+      const result2 = await this.run(false, test.input, void 0, false);
+      if (!result2) {
+        this.isRunningBulk = false;
+        return;
+      }
+      totalTime += result2.durationMs;
+      const normActual = normalizeDsaOutput(result2.output);
+      const normExpected = normalizeDsaOutput(test.expected);
+      if (result2.timedOut) {
+        failed++;
+        failedIndices.push({ index: i + 1, reason: "Time Limit Exceeded" });
+      } else if (!result2.ok) {
+        failed++;
+        failedIndices.push({ index: i + 1, reason: "Runtime Error" });
+      } else if (normActual === normExpected) {
+        passed++;
+      } else {
+        failed++;
+        failedIndices.push({ index: i + 1, reason: "Wrong Answer" });
+      }
+    }
+    this.isRunningBulk = false;
+    this.bulkResult = {
+      total: this.bulkTests.length,
+      passed,
+      failed,
+      durationMs: totalTime,
+      failedIndices
+    };
+    const passRate = Math.round(passed / this.bulkTests.length * 100);
+    this.status = `Bulk: ${passed}/${this.bulkTests.length} passed (${passRate}%) in ${totalTime} ms`;
+    const consoleLines = [
+      "================ Bulk Suite Results ================",
+      `Total Cases: ${this.bulkTests.length}`,
+      `Passed:      ${passed}`,
+      `Failed:      ${failed}`,
+      `Pass Rate:   ${passRate}%`,
+      `Total Time:  ${totalTime} ms`,
+      "----------------------------------------------------"
+    ];
+    if (failedIndices.length > 0) {
+      consoleLines.push("Failed: " + failedIndices.map((f) => `#${f.index} (${f.reason})`).join(", "));
+    } else {
+      consoleLines.push("All bulk cases passed successfully! \u{1F389}");
+    }
+    consoleLines.push("====================================================");
+    this.output = consoleLines.join("\n");
+    this.render();
   }
   async insertResult() {
     const note = this.activeFile();
@@ -342,7 +1015,7 @@ var CodeRunnerView = class extends import_obsidian.ItemView {
     const lines = text.split(/\r?\n/);
     const longestBacktickRun = Math.max(0, ...(this.lastRunResult.match(/`+/g) ?? []).map((run) => run.length));
     const fence = "`".repeat(Math.max(3, longestBacktickRun + 1));
-    const cleanResult = this.lastRunResult.replace(/(?:\r?\n)+$/, "");
+    const cleanResult = this.lastRunResult.replace(/(?:\r?\n)+$/, "").replace(/^(?:Compiling|Starting)\s+[^\n]*block\s+\d+…\r?\n?/i, "");
     const resultLines = cleanResult ? cleanResult.replace(/\r\n/g, "\n").split("\n") : ["(no output)"];
     lines.splice(source.endLine + 1, 0, "", `${fence}output`, ...resultLines, fence);
     await this.app.vault.modify(note, lines.join(eol));
@@ -358,7 +1031,7 @@ var CodeRunnerView = class extends import_obsidian.ItemView {
     const reports = [];
     for (const source of sources) {
       this.selectedBlock = source.index;
-      const result2 = await this.run(false, this.stdin, source.index);
+      const result2 = await this.run(false, "", source.index, false);
       reports.push(`=== ${source.language} block ${source.index + 1}: ${result2?.ok ? "passed" : "failed"} ===
 ${result2?.output ?? "No result"}`);
     }
@@ -369,37 +1042,13 @@ ${result2?.output ?? "No result"}`);
   }
   stop() {
     this.running?.kill();
+    this.isProcessRunning = false;
     this.status = "Stopped";
-    this.output += "\nProcess stopped.";
-    this.render();
-  }
-  async runTests() {
-    await this.ensureTests();
-    if (!this.tests.length) {
-      new import_obsidian.Notice("Add at least one test case first.");
-      return;
-    }
-    const lines = [];
-    let passed = 0;
-    for (let i = 0; i < this.tests.length; i++) {
-      const test = this.tests[i];
-      const result2 = await this.run(false, test.input);
-      if (!result2) return;
-      const actual = result2.output.trim();
-      const ok = result2.ok && actual === test.expected.trim();
-      if (ok) passed++;
-      lines.push(`${ok ? "\u2713" : "\u2717"} Case ${i + 1}${ok ? " passed" : ` failed
-  expected: ${test.expected}
-  actual: ${actual}`}`);
-    }
-    this.output = `${lines.join("\n")}
-
-${passed}/${this.tests.length} test cases passed.`;
-    this.status = passed === this.tests.length ? "All tests passed" : `${this.tests.length - passed} test case(s) failed`;
+    this.output += "\n[Process stopped by user]";
     this.render();
   }
 };
-async function runCode(app, note, source, input, debug, onProcess) {
+async function runCode(app, note, source, options) {
   const started = performance.now();
   const directory = await import_fs.promises.mkdtemp((0, import_path.join)((0, import_os.tmpdir)(), "obsidian-code-runner-"));
   try {
@@ -418,22 +1067,29 @@ async function runCode(app, note, source, input, debug, onProcess) {
       }
     }
     if (source.language === "python") {
-      const executed2 = await invoke("python", [source.name], input, directory, onProcess);
-      return result(executed2.code === 0, executed2.stdout, executed2.stderr, started, source.name);
+      const executed2 = await invoke("python", ["-u", source.name], directory, options);
+      const isOk2 = executed2.code === 0 && !executed2.timedOut;
+      const err2 = executed2.timedOut ? "Time Limit Exceeded. Check for infinite loops or unconsumed stdin." : executed2.stderr;
+      return result(isOk2, executed2.stdout, err2, started, source.name, executed2.timedOut);
     }
     if (source.language === "javascript") {
-      const args2 = debug ? ["--inspect=9229", source.name] : [source.name];
-      const executed2 = await invoke("node", args2, input, directory, onProcess);
-      return result(executed2.code === 0, executed2.stdout, executed2.stderr, started, source.name);
+      const args2 = options.debug ? ["--inspect=9229", source.name] : [source.name];
+      const executed2 = await invoke("node", args2, directory, options);
+      const isOk2 = executed2.code === 0 && !executed2.timedOut;
+      const err2 = executed2.timedOut ? "Time Limit Exceeded. Check for infinite loops or unconsumed stdin." : executed2.stderr;
+      return result(isOk2, executed2.stdout, err2, started, source.name, executed2.timedOut);
     }
     const files = await collectJavaFiles(directory);
-    const compiled = await invoke("javac", ["-encoding", "UTF-8", "-d", directory, ...files], "", directory, onProcess);
-    if (compiled.code !== 0) return result(false, "", compiled.stderr || compiled.stdout, started, source.name);
+    const compileOptions = { onProcess: options.onProcess };
+    const compiled = await invoke("javac", ["-encoding", "UTF-8", "-d", directory, ...files], directory, compileOptions);
+    if (compiled.code !== 0) return result(false, "", compiled.stderr || compiled.stdout || "Java compilation failed.", started, source.name);
     const args = ["-Xmx256m", "-cp", directory];
-    if (debug) args.push("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005");
+    if (options.debug) args.push("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005");
     args.push((0, import_path.basename)(source.name, ".java"));
-    const executed = await invoke("java", args, input, directory, onProcess);
-    return result(executed.code === 0, executed.stdout, executed.stderr, started, source.name);
+    const executed = await invoke("java", args, directory, options);
+    const isOk = executed.code === 0 && !executed.timedOut;
+    const err = executed.timedOut ? "Time Limit Exceeded. Check for infinite loops or unconsumed stdin." : executed.stderr;
+    return result(isOk, executed.stdout, err, started, source.name, executed.timedOut);
   } catch (e) {
     const executable = source.language === "python" ? "Python" : source.language === "javascript" ? "Node.js" : "a Java JDK";
     return result(false, "", `Could not start ${source.language}. Ensure ${executable} is installed and available on PATH.
@@ -445,8 +1101,8 @@ ${String(e)}`, started);
     }
   }
 }
-function result(ok, output, error, started, sourceName) {
-  return { ok, output, error, durationMs: Math.round(performance.now() - started), sourceName };
+function result(ok, output, error, started, sourceName, timedOut = false) {
+  return { ok, output, error, durationMs: Math.round(performance.now() - started), sourceName, timedOut };
 }
 async function collectJavaFiles(folder) {
   const files = [];
@@ -460,32 +1116,61 @@ async function collectJavaFiles(folder) {
   await visit(folder);
   return files;
 }
-function invoke(command, args, input, cwd, onProcess) {
+function invoke(command, args, cwd, options) {
   return new Promise((resolve, reject) => {
     const child = (0, import_child_process.spawn)(command, args, { cwd, shell: false, windowsHide: true });
-    onProcess(child);
+    options.onProcess?.(child);
     let stdout = "";
     let stderr = "";
     let settled = false;
-    child.stdout?.on("data", (d) => stdout += d);
-    child.stderr?.on("data", (d) => stderr += d);
-    const timer = setTimeout(() => {
-      if (!child.killed) child.kill();
-    }, DEFAULT_TIMEOUT_MS);
+    let timedOut = false;
+    const isInteractive = Boolean(options.interactive);
+    const timeoutDuration = isInteractive ? 18e4 : DEFAULT_TIMEOUT_MS;
+    let timer;
+    const resetTimer = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (!child.killed) {
+          timedOut = true;
+          child.kill();
+        }
+      }, timeoutDuration);
+    };
+    resetTimer();
+    child.stdout?.on("data", (d) => {
+      const str = d.toString();
+      stdout += str;
+      options.onData?.(str);
+      resetTimer();
+    });
+    child.stderr?.on("data", (d) => {
+      const str = d.toString();
+      stderr += str;
+      options.onData?.(str);
+      resetTimer();
+    });
     const finish = (code, err) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       if (err) reject(err);
-      else resolve({ code, stdout, stderr });
+      else resolve({ code, stdout, stderr, timedOut });
     };
     child.on("error", (err) => finish(null, err));
     child.on("close", (code) => finish(code));
     child.stdin?.on("error", () => {
     });
-    if (input) {
-      child.stdin?.write(input);
+    if (options.input) {
+      child.stdin?.write(options.input);
     }
-    child.stdin?.end();
+    if (!isInteractive) {
+      child.stdin?.end();
+    }
   });
 }
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  getDsaDiagnosticHint,
+  normalizeDsaOutput,
+  parseBulkInput
+});

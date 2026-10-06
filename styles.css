@@ -2,203 +2,918 @@
 .java-ide-view {
   --runner-border: var(--background-modifier-border);
   --runner-surface: var(--background-secondary);
-  max-width: 920px;
+  --runner-surface-hover: var(--background-modifier-hover);
+  --runner-accent: var(--interactive-accent);
+  --runner-accent-hover: var(--interactive-accent-hover);
+  --runner-success: #10b981;
+  --runner-success-bg: rgba(16, 185, 129, 0.12);
+  --runner-danger: #ef4444;
+  --runner-danger-bg: rgba(239, 68, 68, 0.12);
+  --runner-warning: #f59e0b;
+  --runner-warning-bg: rgba(245, 158, 11, 0.12);
+  max-width: 960px;
   margin: 0 auto;
-  padding: 22px;
+  padding: 18px 20px;
+  font-size: 14px;
 }
+
+/* ==========================================================================
+   Hero Header
+   ========================================================================== */
 
 .code-runner-hero,
 .java-ide-hero {
   align-items: center;
   background: linear-gradient(135deg, var(--background-secondary), var(--background-primary-alt));
   border: 1px solid var(--runner-border);
-  border-radius: 14px;
+  border-radius: 12px;
   display: flex;
-  gap: 20px;
+  flex-wrap: wrap;
+  gap: 16px;
   justify-content: space-between;
-  margin-bottom: 22px;
-  padding: 17px 18px;
+  margin-bottom: 14px;
+  padding: 15px 18px;
+  box-shadow: none;
 }
 
-.code-runner-hero h2,
-.java-ide-hero h2 {
+.code-runner-title-area {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.code-runner-title-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.code-runner-title-header h2 {
   font-size: 1.25em;
-  letter-spacing: -.02em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   line-height: 1.1;
-  margin: 0 0 6px;
+  margin: 0;
+}
+
+.code-runner-dsa-badge {
+  background: color-mix(in srgb, var(--interactive-accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--interactive-accent) 30%, transparent);
+  border-radius: 9999px;
+  color: var(--interactive-accent);
+  font-size: 0.72em;
+  font-weight: 600;
+  padding: 2px 8px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .code-runner-subtitle,
 .java-ide-subtitle {
   color: var(--text-muted);
-  font-size: .86em;
+  font-size: 0.86em;
   line-height: 1.35;
   margin: 0;
 }
 
-.code-runner-subtitle + .code-runner-subtitle,
-.java-ide-subtitle + .java-ide-subtitle {
-  color: var(--text-faint);
-  margin-top: 2px;
-}
+/* ==========================================================================
+   Buttons & Actions
+   ========================================================================== */
 
-.code-runner-actions,
-.code-runner-toolbar,
-.java-ide-actions,
-.java-ide-toolbar {
+.code-runner-actions {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 8px;
 }
 
-.code-runner-view button,
-.code-runner-view select,
-.java-ide-view button,
-.java-ide-view select {
-  border-radius: 7px;
-  font-size: .86em;
-  min-height: 30px;
-}
-
+/* Default / Secondary / Transparent Buttons:
+   Minimal thin 1px border, strictly NO box-shadow */
 .code-runner-view button,
 .java-ide-view button {
-  padding: 4px 10px;
-}
-
-.code-runner-actions .mod-cta,
-.java-ide-actions .mod-cta {
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--interactive-accent) 25%, transparent);
-}
-
-.code-runner-label,
-.java-ide-label {
-  color: var(--text-muted);
-  display: block;
-  font-size: .72em;
-  font-weight: 700;
-  letter-spacing: .075em;
-  margin: 18px 0 8px;
-  text-transform: uppercase;
-}
-
-.code-runner-input,
-.java-ide-input {
-  background: var(--runner-surface);
+  background: var(--background-secondary);
   border: 1px solid var(--runner-border);
-  border-radius: 10px;
-  box-sizing: border-box;
-  font: 13px/1.5 var(--font-monospace);
-  min-height: 76px;
-  padding: 10px 11px;
-  resize: vertical;
-  transition: border-color .15s ease, box-shadow .15s ease;
-  width: 100%;
+  border-radius: 7px;
+  box-shadow: none !important;
+  color: var(--text-normal);
+  cursor: pointer;
+  font-size: 0.86em;
+  font-weight: 500;
+  min-height: 32px;
+  padding: 5px 12px;
+  transition: all 0.15s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
 }
 
-.code-runner-input:focus,
-.code-runner-test input:focus,
-.java-ide-input:focus,
-.java-ide-test input:focus {
+.code-runner-view button:hover,
+.java-ide-view button:hover,
+.code-runner-view button:active,
+.java-ide-view button:active,
+.code-runner-view button:focus,
+.java-ide-view button:focus {
+  background: var(--runner-surface-hover);
   border-color: var(--interactive-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 18%, transparent);
+  box-shadow: none !important;
   outline: none;
 }
 
-.code-runner-toolbar,
-.java-ide-toolbar {
-  border-bottom: 1px solid var(--runner-border);
-  margin: 14px 0 16px;
-  padding-bottom: 14px;
+/* Colored CTA / Primary Buttons:
+   Strictly NO border and NO box-shadow */
+.code-runner-view button.mod-cta,
+.code-runner-view button.code-runner-btn-primary,
+.code-runner-view button.code-runner-terminal-send,
+.code-runner-btn-primary,
+.code-runner-terminal-send {
+  background: var(--interactive-accent) !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: var(--text-on-accent) !important;
+  font-weight: 600 !important;
 }
 
-.code-runner-toolbar select,
-.java-ide-toolbar select {
-  background: var(--runner-surface);
+.code-runner-view button.mod-cta:hover,
+.code-runner-view button.code-runner-btn-primary:hover,
+.code-runner-view button.code-runner-terminal-send:hover,
+.code-runner-btn-primary:hover,
+.code-runner-terminal-send:hover {
+  background: var(--interactive-accent-hover) !important;
+  border: none !important;
+  box-shadow: none !important;
+  filter: brightness(1.06);
+}
+
+.code-runner-btn-sm {
+  font-size: 0.78em !important;
+  min-height: 26px !important;
+  padding: 3px 8px !important;
+  box-shadow: none !important;
+}
+
+.code-runner-btn-icon {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  box-shadow: none !important;
+  padding: 4px 6px !important;
+  font-size: 0.9em !important;
+  cursor: pointer;
+}
+
+.code-runner-btn-icon:hover {
+  background: var(--runner-surface-hover) !important;
+  border-color: var(--runner-border) !important;
+  box-shadow: none !important;
+}
+
+.code-runner-view button.mod-warning {
+  color: var(--text-error);
+  box-shadow: none !important;
+}
+
+.code-runner-view button.mod-warning:hover {
+  background: var(--runner-danger-bg);
+  border-color: var(--runner-danger);
+  box-shadow: none !important;
+}
+
+/* ==========================================================================
+   Code Block Selector (Positioned Above Mode Switch)
+   ========================================================================== */
+
+.code-runner-block-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--background-secondary);
   border: 1px solid var(--runner-border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  margin-bottom: 14px;
+  box-shadow: none !important;
+}
+
+.code-runner-toolbar-label {
+  color: var(--text-muted);
+  font-size: 0.78em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.code-runner-select {
+  background-color: var(--background-primary) !important;
+  border: 1px solid var(--runner-border) !important;
+  border-radius: 6px !important;
+  color: var(--text-normal) !important;
+  font-size: 0.85em !important;
+  font-weight: 500 !important;
+  padding: 4px 28px 4px 10px !important;
+  min-height: 28px !important;
+  cursor: pointer;
+  box-shadow: none !important;
+  outline: none !important;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>');
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 11px;
+  transition: border-color 0.15s ease;
+}
+
+.code-runner-select:hover {
+  border-color: var(--interactive-accent) !important;
+  box-shadow: none !important;
+}
+
+.code-runner-select:focus {
+  border-color: var(--interactive-accent) !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.code-runner-select option {
+  background-color: var(--background-primary);
   color: var(--text-normal);
   padding: 4px 8px;
 }
 
-.code-runner-tests,
-.java-ide-tests {
-  background: var(--background-primary-alt);
-  border: 1px solid var(--runner-border);
-  border-radius: 11px;
-  margin-top: 14px;
-  padding: 2px 13px 12px;
+/* ==========================================================================
+   Primary Mode Switcher (Clean Baseline Navigation - Single Line at Bottom)
+   ========================================================================== */
+
+.code-runner-mode-switch {
+  display: flex;
+  align-items: center;
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 1px solid var(--runner-border) !important;
+  border-radius: 0 !important;
+  padding: 0 4px !important;
+  gap: 20px;
+  margin-bottom: 16px;
+  box-shadow: none !important;
 }
 
-.code-runner-tests .code-runner-label,
-.java-ide-tests .java-ide-label {
-  margin-top: 12px;
+.code-runner-mode-btn {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  color: var(--text-muted) !important;
+  cursor: pointer;
+  font-size: 0.88em !important;
+  font-weight: 500 !important;
+  min-height: auto !important;
+  padding: 8px 4px !important;
+  position: relative;
+  transition: color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 0 0 auto;
 }
 
-.code-runner-test,
-.java-ide-test {
-  display: grid;
-  gap: 7px;
-  grid-template-columns: 1fr 1fr auto;
-  margin: 7px 0;
+.code-runner-mode-btn:hover {
+  color: var(--text-normal) !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
-.code-runner-test input,
-.java-ide-test input {
+.code-runner-mode-btn.is-active {
+  background: transparent !important;
+  color: var(--interactive-accent) !important;
+  font-weight: 600 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.code-runner-mode-btn.is-active::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--interactive-accent);
+  border-radius: 2px 2px 0 0;
+}
+
+/* ==========================================================================
+   Sub-Mode Switcher (Ultra-Clean, Completely Borderless Navigation)
+   ========================================================================== */
+
+.code-runner-sub-switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none !important;
+  border-bottom: none !important;
+  margin-bottom: 14px;
+  padding: 0;
+  box-shadow: none !important;
+}
+
+.code-runner-sub-btn {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: none !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  color: var(--text-muted) !important;
+  cursor: pointer;
+  font-size: 0.85em !important;
+  font-weight: 500 !important;
+  padding: 5px 12px !important;
+  min-height: 28px !important;
+  transition: all 0.15s ease;
+}
+
+.code-runner-sub-btn:hover {
+  color: var(--text-normal) !important;
+  background: var(--runner-surface-hover) !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.code-runner-sub-btn.is-active {
+  color: var(--text-normal) !important;
+  background: var(--runner-surface-hover) !important;
+  font-weight: 600 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* ==========================================================================
+   DSA Sample Test Workbench (Compact & Scalable for 20+ Cases)
+   ========================================================================== */
+
+.code-runner-dsa-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.code-runner-tabs-header {
+  display: flex;
+  align-items: center;
+  padding-bottom: 2px;
+}
+
+.code-runner-tabs-list {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.code-runner-tabs-list.is-compact-grid {
+  flex-wrap: wrap;
+  gap: 5px;
+  max-height: 140px;
+  overflow-y: auto;
+  padding: 2px 0;
+}
+
+.code-runner-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: var(--background-secondary);
   border: 1px solid var(--runner-border);
-  border-radius: 6px;
-  box-sizing: border-box;
-  color: var(--text-normal);
-  min-width: 0;
-  padding: 5px 7px;
-  width: 100%;
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.82em;
+  font-weight: 500;
+  padding: 5px 12px;
+  transition: all 0.15s ease;
+  user-select: none;
 }
 
-.code-runner-console,
-.java-ide-console {
-  background: var(--background-primary-alt);
+.code-runner-tab.is-compact {
+  min-width: 34px;
+  padding: 4px 8px;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.82em;
+  gap: 4px;
+}
+
+.code-runner-tab:hover {
+  background: var(--runner-surface-hover);
+  color: var(--text-normal);
+}
+
+.code-runner-tab.is-active {
+  background: var(--background-primary);
+  border-color: var(--interactive-accent);
+  color: var(--text-normal);
+  font-weight: 600;
+  box-shadow: none !important;
+}
+
+.code-runner-tab-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  display: inline-block;
+}
+
+.code-runner-tab-dot.dot-accepted {
+  background: var(--runner-success);
+  box-shadow: 0 0 5px rgba(16, 185, 129, 0.6);
+}
+
+.code-runner-tab-dot.dot-failed {
+  background: var(--runner-danger);
+  box-shadow: 0 0 5px rgba(239, 68, 68, 0.6);
+}
+
+.code-runner-tab-dot.dot-tle {
+  background: var(--runner-warning);
+  box-shadow: 0 0 5px rgba(245, 158, 11, 0.6);
+}
+
+.code-runner-add-tab-btn {
+  background: transparent !important;
+  border: 1px dashed var(--runner-border) !important;
+  border-radius: 8px !important;
+  color: var(--text-muted) !important;
+  cursor: pointer;
+  font-size: 1.1em !important;
+  padding: 3px 10px !important;
+  min-height: 28px !important;
+}
+
+.code-runner-add-tab-btn.is-compact {
+  min-width: 32px;
+  padding: 2px 7px !important;
+  min-height: 26px !important;
+}
+
+.code-runner-add-tab-btn:hover {
+  border-color: var(--interactive-accent) !important;
+  color: var(--interactive-accent) !important;
+}
+
+/* Card Workbench */
+
+.code-runner-card {
+  background: var(--background-secondary);
   border: 1px solid var(--runner-border);
   border-radius: 11px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.code-runner-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--runner-border);
+  padding-bottom: 9px;
+  margin-bottom: 3px;
+}
+
+.code-runner-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.95em;
+  font-weight: 700;
+  color: var(--text-normal);
+}
+
+.code-runner-verdict-badge {
+  font-size: 0.76em;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  letter-spacing: 0.02em;
+}
+
+.code-runner-verdict-badge.verdict-accepted {
+  background: var(--runner-success-bg);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: var(--runner-success);
+}
+
+.code-runner-verdict-badge.verdict-failed {
+  background: var(--runner-danger-bg);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--runner-danger);
+}
+
+.code-runner-verdict-badge.verdict-tle {
+  background: var(--runner-warning-bg);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: var(--runner-warning);
+}
+
+.code-runner-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.code-runner-field-label {
+  color: var(--text-muted);
+  font-size: 0.74em;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin: 2px 0 0;
+}
+
+.code-runner-textarea {
+  background: var(--background-primary);
+  border: 1px solid var(--runner-border);
+  border-radius: 8px;
   box-sizing: border-box;
   color: var(--text-normal);
-  font: 13px/1.55 var(--font-monospace);
-  max-height: 48vh;
-  min-height: 190px;
+  font: 13px/1.5 var(--font-monospace);
+  padding: 8px 10px;
+  resize: vertical;
+  width: 100%;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.code-runner-textarea:focus {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 20%, transparent);
+  outline: none;
+}
+
+.code-runner-actual-box {
+  background: var(--background-primary);
+  border: 1px solid var(--runner-border);
+  border-radius: 8px;
+  box-sizing: border-box;
+  color: var(--text-normal);
+  font: 13px/1.5 var(--font-monospace);
+  padding: 8px 10px;
   margin: 0;
+  max-height: 180px;
   overflow: auto;
-  padding: 13px;
   white-space: pre-wrap;
 }
 
-.code-runner-status,
-.java-ide-status {
-  color: var(--text-muted);
-  font-size: .82em;
-  margin: 8px 2px 0;
+.code-runner-actual-box.is-passed {
+  border-left: 3px solid var(--runner-success);
 }
 
-.code-runner-error,
-.java-ide-error {
+.code-runner-actual-box.is-failed {
+  border-left: 3px solid var(--runner-danger);
+}
+
+.code-runner-dsa-bottom {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.code-runner-run-all-btn {
+  width: 100%;
+  min-height: 36px !important;
+  font-size: 0.9em !important;
+}
+
+/* ==========================================================================
+   Bulk Test Suite Section (Clean & Lightweight)
+   ========================================================================== */
+
+.code-runner-bulk-container {
+  background: var(--background-secondary);
+  border: 1px solid var(--runner-border);
+  border-radius: 11px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.code-runner-bulk-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--runner-border);
+  padding-bottom: 10px;
+}
+
+.code-runner-bulk-title-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.code-runner-bulk-title {
+  font-weight: 700;
+  font-size: 0.98em;
+  color: var(--text-normal);
+}
+
+.code-runner-bulk-count {
+  background: color-mix(in srgb, var(--interactive-accent) 15%, transparent);
+  border-radius: 9999px;
+  color: var(--interactive-accent);
+  font-size: 0.76em;
+  font-weight: 600;
+  padding: 2px 7px;
+}
+
+.code-runner-bulk-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.code-runner-bulk-run-bar {
+  margin: 2px 0 4px;
+}
+
+.code-runner-bulk-primary-btn {
+  width: 100%;
+  min-height: 38px !important;
+  font-size: 0.92em !important;
+  font-weight: 600 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.code-runner-bulk-empty {
+  padding: 8px 0;
+}
+
+.code-runner-bulk-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.code-runner-bulk-textarea {
+  min-height: 120px;
+}
+
+.code-runner-bulk-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.code-runner-bulk-banner {
+  border-radius: 9px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.code-runner-bulk-banner.is-success {
+  background: var(--runner-success-bg);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.code-runner-bulk-banner.is-failure {
+  background: var(--runner-danger-bg);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.code-runner-bulk-banner-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.code-runner-bulk-verdict {
+  font-weight: 700;
+  font-size: 0.95em;
+  color: var(--text-normal);
+}
+
+.code-runner-bulk-time {
+  font-size: 0.82em;
+  color: var(--text-muted);
+}
+
+.code-runner-bulk-progress {
+  height: 6px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 9999px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.code-runner-bulk-progress-fill {
+  height: 100%;
+  background: var(--runner-success);
+  transition: width 0.3s ease;
+}
+
+.code-runner-bulk-failed-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.code-runner-bulk-chips-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.code-runner-failed-chip {
+  background: var(--background-primary);
+  border: 1px solid var(--runner-danger);
+  border-radius: 6px;
+  color: var(--runner-danger);
+  font-size: 0.76em;
+  font-weight: 600;
+  padding: 2px 7px;
+}
+
+/* ==========================================================================
+   Console Output & Interactive Terminal Section
+   ========================================================================== */
+
+.code-runner-console-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.code-runner-console-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.code-runner-console-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.code-runner-live-badge {
+  background: var(--runner-success-bg);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: 9999px;
+  color: var(--runner-success);
+  font-size: 0.7em;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.code-runner-pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--runner-success);
+  box-shadow: 0 0 6px var(--runner-success);
+  animation: runner-pulse 1.4s infinite ease-in-out;
+}
+
+@keyframes runner-pulse {
+  0% { transform: scale(0.9); opacity: 0.6; }
+  50% { transform: scale(1.3); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.6; }
+}
+
+.code-runner-console-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.code-runner-diagnostic-box {
+  background: var(--runner-warning-bg);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 0.85em;
+  line-height: 1.4;
+  color: var(--text-normal);
+}
+
+.code-runner-diag-title {
+  color: var(--runner-warning);
+  font-weight: 700;
+}
+
+/* Terminal Screen Wrapper */
+.code-runner-terminal-wrapper {
+  background: var(--background-primary);
+  border: 1px solid var(--runner-border);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.code-runner-console {
+  background: transparent;
+  border: none;
+  box-sizing: border-box;
+  color: var(--text-normal);
+  font: 13px/1.55 var(--font-monospace);
+  max-height: 42vh;
+  min-height: 170px;
+  margin: 0;
+  overflow: auto;
+  padding: 12px 14px;
+  white-space: pre-wrap;
+}
+
+/* Interactive Input Bar at bottom of console */
+.code-runner-terminal-bar {
+  background: var(--background-secondary);
+  border-top: 1px solid var(--runner-border);
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  gap: 8px;
+}
+
+.code-runner-terminal-prompt {
+  color: var(--interactive-accent);
+  font: 700 13px/1 var(--font-monospace);
+  user-select: none;
+}
+
+.code-runner-terminal-input {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: var(--text-normal) !important;
+  flex: 1;
+  font: 13px/1.4 var(--font-monospace) !important;
+  outline: none !important;
+  padding: 4px 6px !important;
+}
+
+.code-runner-terminal-input:disabled {
+  color: var(--text-faint) !important;
+  cursor: not-allowed;
+}
+
+.code-runner-terminal-send {
+  background: var(--interactive-accent) !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: var(--text-on-accent) !important;
+  font-weight: 600 !important;
+}
+
+.code-runner-terminal-send:disabled {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+}
+
+.code-runner-status {
+  color: var(--text-muted);
+  font-size: 0.82em;
+  margin: 2px 2px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.code-runner-status.code-runner-error {
   color: var(--text-error);
 }
 
-.code-runner-success,
-.java-ide-success {
-  color: var(--text-success);
-}
+/* ==========================================================================
+   Footer Credit
+   ========================================================================== */
 
 .code-runner-credit {
   color: var(--text-faint);
-  font-size: .76em;
-  letter-spacing: .01em;
-  margin: 20px 2px 0;
+  font-size: 0.76em;
+  letter-spacing: 0.01em;
+  margin: 22px 2px 0;
   text-align: right;
 }
 
 .code-runner-credit a {
   color: var(--text-muted);
   text-decoration: none;
-  transition: color .15s ease;
+  transition: color 0.15s ease;
 }
 
 .code-runner-credit a:hover {
@@ -206,31 +921,23 @@
   text-decoration: underline;
 }
 
+/* ==========================================================================
+   Mobile & Compact Responsive
+   ========================================================================== */
+
 @media (max-width: 560px) {
   .code-runner-view,
   .java-ide-view {
     padding: 12px;
   }
-  .code-runner-hero,
-  .java-ide-hero {
-    align-items: stretch;
+  .code-runner-hero {
     flex-direction: column;
-    gap: 12px;
+    align-items: stretch;
   }
-  .code-runner-actions,
-  .java-ide-actions {
+  .code-runner-actions {
     width: 100%;
   }
-  .code-runner-actions button,
-  .java-ide-actions button {
+  .code-runner-actions button {
     flex: 1 1 auto;
-  }
-  .code-runner-test,
-  .java-ide-test {
-    grid-template-columns: 1fr auto;
-  }
-  .code-runner-test input:first-child,
-  .java-ide-test input:first-child {
-    grid-column: 1 / -1;
   }
 }
